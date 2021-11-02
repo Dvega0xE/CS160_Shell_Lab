@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <stdbool.h>
 
 /* Misc manifest constants */
 #define MAXLINE 1024   /* max line size */
@@ -305,6 +306,56 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv)
 {
+    struct job_t *jobp = NULL;
+    //argv[0] == char* fg | bg
+    if (argv[1] == 1)
+    {
+        printf("we should type in PID or %%JID.\n");
+        return;
+    }
+    //distinguish two cases: bg/fg and PID/%JID
+    if (isdigit(argv[1][0]))
+    {
+        //PID
+        pid_t pid = atoi(argv[1]); //we get PID
+        jobp = getjobpid(jobs, pid);
+        //pseudo code:
+        //if this is not a valid pid -- we return with an output: No such process.
+        //valid pid? judge whether the jobp is a valid job
+    }
+    else
+    {
+        if (argv[1][0] == '%')
+        {
+            int jid = atoi(&argv[1][1]);
+            jobp = getjobjid(jobs, jid);
+            /*if (jobp is invalid) {
+            *    printf("we dont have such a job in the job list.\n");
+            *   return;
+            * }
+            */
+        }
+        else
+        {
+            printf("invalid.\n");
+        }
+    }
+    //we make sure that all inputs arrive this point are valid.
+    //if this is a bg cmd/
+    if (!strcmp(argv[0], "bg"))
+    {
+        pid_t pid = jobp->pid;
+        kill(-pid, SIGCONT);
+        jobp->state = BG;
+        printf("[%d] (%d) %s", jobp->jid, jobp->pid, jobp->cmdline);
+    }
+    else
+    { //do we make sure this is fg?
+        pid_t pid = jobp->pid;
+        kill(-pid, SIGCONT);
+        jobp->state = FG;
+        waitfg(pid);
+    }
     return;
 }
 
@@ -313,6 +364,15 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    struct job_t *j = getjobpid(jobs, pid);
+    if (!j)
+        return;
+    bool case1 = true;
+    bool case2 = true;
+    //case1: check whether j->pid is the pid that we are waiting for.
+    //case2: whether j->state is FG
+    while (case1 && case2)
+        sleep(1);
     return;
 }
 
@@ -329,6 +389,32 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig)
 {
+    pid_t child_pid;
+    int status;
+    while (child_pid == waitpid(-1, &status, WNOHANG | WUNTRACED) > 0)
+    {
+        //we have detected a terminated or a stopped job -- we dont wait for others during which,
+        //if this job stopped by receiving a signal?
+        if (WIFSTOPPED(status))
+        {
+            //get the job data structure according to its pid
+            //if (!j) return;
+            //j->state = ST;
+            //printf("this job is stopped by signal %d.\n", sigid);
+        }
+        //this job is terminated by an uncaught signal?
+        if (WIFSIGNALED(status))
+        {
+            //source code: deletejob(jobs, child_pid);
+            //printf("this job is stopped by signal %d.\n", sigid);
+        }
+        //this job is terminated normally
+        if (WIFEXITED(status))
+        {
+            //source code: deletejob(jobs, child_pid);
+            //printf("if you wanna give it an output.\n");
+        }
+    }
     return;
 }
 
@@ -339,6 +425,12 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
+    pid_t pid;
+    pid = fgpid(jobs); //fgpid returns a pid != 0 when it finds it. Otherwise it returns 0.
+    if (pid > 0)
+    {
+        kill(-pid, SIGINT);
+    }
     return;
 }
 
@@ -349,6 +441,12 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig)
 {
+    pid_t pid;
+    pid = fgpid(jobs);
+    if (pid > 0)
+    {
+        kill(-pid, SIGTSTP); //pause signal
+    }
     return;
 }
 
