@@ -370,6 +370,14 @@ void waitfg(pid_t pid)
     bool case1 = true;
     bool case2 = true;
     //case1: check whether j->pid is the pid that we are waiting for.
+    if (case1)
+    {
+        j->pid = FG;
+    }
+    if (case2)
+    {
+        j->state = FG;
+    }
     //case2: whether j->state is FG
     while (case1 && case2)
         sleep(1);
@@ -395,24 +403,26 @@ void sigchld_handler(int sig)
     {
         //we have detected a terminated or a stopped job -- we dont wait for others during which,
         //if this job stopped by receiving a signal?
+        pid_t pid;
         if (WIFSTOPPED(status))
         {
             //get the job data structure according to its pid
-            //if (!j) return;
-            //j->state = ST;
-            //printf("this job is stopped by signal %d.\n", sigid);
+            struct job_t *j = getjobpid(jobs, pid);
+            if (!j)
+                return;
+            j->state = ST;
+            printf("this job is stopped by signal %d.\n", WSTOPSIG(status));
         }
         //this job is terminated by an uncaught signal?
         if (WIFSIGNALED(status))
         {
-            //source code: deletejob(jobs, child_pid);
-            //printf("this job is stopped by signal %d.\n", sigid);
+            deletejob(jobs, child_pid);
+            printf("this job is stopped by signal %d.\n", WTERMSIG(status));
         }
         //this job is terminated normally
         if (WIFEXITED(status))
         {
-            //source code: deletejob(jobs, child_pid);
-            //printf("if you wanna give it an output.\n");
+            deletejob(jobs, child_pid);
         }
     }
     return;
